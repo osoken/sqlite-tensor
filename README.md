@@ -1,1 +1,1 @@
-# sqlite-tensor
+# sqlite_tensor
