@@ -3,6 +3,7 @@
 import io
 import sqlite3
 import pickle
+from collections import Iterable
 
 import numpy as np
 
@@ -10,6 +11,13 @@ from . import util
 
 
 class Tensor(object):
+    """``numpy.array`` with attr and id.
+
+    :param data: ``numpy.array``
+    :param attr: ``dict`` object or ``None``
+    :param id: ``str``
+    """
+
     def __init__(self, data, attr=None, id=None, **kwargs):
         super(Tensor, self).__init__()
         super(Tensor, self).__setattr__('_data', data)
@@ -18,43 +26,71 @@ class Tensor(object):
         )
         super(Tensor, self).__setattr__(
             '_attr',
+            None if attr is None and len(kwargs) == 0 else
             dict(attr if attr is not None else {}, **kwargs)
         )
 
     @property
     def id(self):
+        """get id of this object
+        """
         return self._id
 
     @property
     def data(self):
+        """get data of this object
+        """
         return self._data
 
     @property
     def attr(self):
+        """get attr of this object. If ``_attr`` is None, this method creates\
+        an empty dict.
+        """
+        if self._attr is None:
+            self._attr = {}
         return self._attr
 
     def __getattr__(self, name):
+        """direct access to ``numpy.array``\'s attributes
+
+        :param name: ``str``
+        """
         return getattr(self._data, name)
 
     def __getitem__(self, key):
+        """direct access to ``numpy.array``\'s indexing
+
+        :param key: any objects acceptable for ``numpy.array``\'s\
+        ``__getitem__``
+        """
         return self._data.__getitem__(key)
 
     def __setitem__(self, key, value):
+        """direct access to ``numpy.array``\'s index assignation
+
+        :param key: any objects acceptable for ``numpy.array``\'s\
+        ``__setitem__``
+        """
         return self._data.__setitem__(key, value)
 
 
-class Connection(object):
+class Database(Iterable):
+
     @property
     def schema_version(self):
         return '0'
 
     def __init__(self, connection):
-        super(Connection, self).__init__()
-        self.connection = connection
+        super(Database, self).__init__()
+        if isinstance(connection, sqlite3.Connection):
+            self.connection = connection
+        else:
+            self.connection = sqlite3.Connection(connection)
         if not self.is_init():
-            self.__init()
+            self.__init_tables()
 
-    def __init(self):
+    def __init_tables(self):
         cur = self.connection.cursor()
         cur.execute(
             'CREATE TABLE metadata (key TEXT, value TEXT)'
@@ -65,30 +101,17 @@ class Connection(object):
             'data BLOB, ' +
             'attr BLOB)'
         )
-        cur.execute(
-            'CREATE TABLE collection (' +
-            'id TEXT(22) PRIMARY KEY, ' +
-            'name TEXT, ' +
-            'attr BLOB)'
-        )
-        cur.execute(
-            'CREATE TABLE collection_member (' +
-            'collection_id TEXT(22) NOT NULL REFERENCES collection(id), ' +
-            'tensor_id TEXT(22) NOT NULL REFERENCES tensor(id), ' +
-            'CONSTRAINT collection_member_pkey PRIMARY KEY (' +
-            'collection_id, tensor_id))'
-        )
-        cur.execute(
-            'CREATE INDEX collection_member_ix_collection_id ON ' +
-            'collection_member (collection_id)'
-        )
         cur.executemany(
             'INSERT INTO metadata (key, value) VALUES (?, ?)',
             (('schema_version', self.schema_version),
              ('initialized_at', util.now()))
         )
+        self.connection.commit()
 
     def is_init(self):
+        """return ``True`` if this object is initialized with current schema\
+        and return ``False`` otherwise.
+        """
         cur = self.connection.cursor()
         masterdata = list(cur.execute(
             'SELECT * FROM sqlite_master WHERE name="metadata"'
@@ -104,7 +127,11 @@ class Connection(object):
             return True
         return False
 
-    def save(self, tensor):
+    def save(self, tensor, commit=True):
+        """update or insert ``tensor`` into the table.
+
+        :param tensor: ``Tensor`` object
+        """
         cur = self.connection.cursor()
         rec = list(cur.execute(
             'SELECT id FROM ' +
@@ -120,6 +147,20 @@ class Connection(object):
                 'INSERT INTO tensor (data, attr, id) VALUES (?, ?, ?)',
                 self.serialize(tensor)
             )
+        if commit:
+            self.connection.commit()
+
+    def erase(self, tensor_id, commit=True):
+        """delete tensor whose id is ``tensor_id`` from the table.
+
+        :param tensor_id: ``str`` or ``Tensor`` object
+        """
+        if isinstance(tensor_id, Tensor):
+            return self.erase(tensor_id.id, commit)
+        cur = self.connection.cursor()
+        cur.execute('DELETE FROM tensor WHERE id=?', (tensor_id, ))
+        if commit:
+            self.connection.commit()
 
     def __getitem__(self, key):
         if not isinstance(key, (str, bytes)):
@@ -137,8 +178,7 @@ class Connection(object):
         return self.save(Tensor(data=np.array(value), attr=None, id=key))
 
     def __delitem__(self, key):
-        cur = self.connection.cursor()
-        cur.execute('DELETE FROM tensor WHERE id=?', (key, ))
+        return self.erase(key)
 
     def __iter__(self):
         for x in self.connection.cursor().execute(
@@ -152,9 +192,9 @@ class Connection(object):
 
     @classmethod
     def serialize(cls, tensor):
-        return (cls.serialize_array(tensor.data),
-                cls.serialize_attr(tensor.attr),
-                tensor.id)
+        return (cls.serialize_array(tensor._data),
+                cls.serialize_attr(tensor._attr),
+                tensor._id)
 
     @classmethod
     def deserialize(cls, record):
@@ -179,6 +219,8 @@ class Connection(object):
 
     @classmethod
     def serialize_attr(cls, data):
+        if data is None:
+            return None
         s = io.BytesIO()
         pickle.dump(data, s)
         s.seek(0)
@@ -186,6 +228,8 @@ class Connection(object):
 
     @classmethod
     def deserialize_attr(cls, data):
+        if data is None:
+            return None
         s = io.BytesIO(data)
         s.seek(0)
         return pickle.load(s)
