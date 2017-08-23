@@ -21,7 +21,7 @@ class TensorTester(unittest.TestCase):
         self.assertEqual(t._data.shape, (2, 3))
         self.assertTrue(isinstance(t._id, (str, bytes)))
         self.assertTrue(len(t._id), 22)
-        self.assertEqual(len(t._attr), 0)
+        self.assertIsNone(t._attr)
         t = core.Tensor(np.zeros(3), None, '123')
         self.assertEqual(t._id, '123')
         t = core.Tensor(np.zeros(3), None, 123)
@@ -90,7 +90,7 @@ class TensorTester(unittest.TestCase):
         self.assertFalse(np.all(t == arr_bk))
 
 
-class TestConnection(unittest.TestCase):
+class TestDatabase(unittest.TestCase):
 
     def setUp(self):
         pass
@@ -100,22 +100,30 @@ class TestConnection(unittest.TestCase):
 
     def test__init__(self):
         conn = sqlite3.Connection(':memory:')
-        tconn = core.Connection(conn)
+        tconn = core.Database(conn)
         self.assertTrue(tconn.is_init())
         conn.cursor().execute(
+            'DELETE FROM metadata WHERE key="schema_version"'
+        )
+        conn.commit()
+        self.assertFalse(tconn.is_init())
+
+        tconn = core.Database(':memory:')
+        self.assertTrue(tconn.is_init())
+        tconn.connection.cursor().execute(
             'DELETE FROM metadata WHERE key="schema_version"'
         )
         self.assertFalse(tconn.is_init())
 
     def test_serialize_deserialize_array(self):
         t = np.random.uniform(size=(80, 90))
-        s = core.Connection.serialize_array(t)
-        self.assertTrue(np.all(t == core.Connection.deserialize_array(s)))
+        s = core.Database.serialize_array(t)
+        self.assertTrue(np.all(t == core.Database.deserialize_array(s)))
 
     def test_serialize_deserialize_attr(self):
         t = core.Tensor(np.zeros(3), {'a': 1, 'b': 2})
-        s = core.Connection.deserialize_attr(
-            core.Connection.serialize_attr(t.attr)
+        s = core.Database.deserialize_attr(
+            core.Database.serialize_attr(t.attr)
         )
         self.assertTrue(all([
             t.attr[k] == s[k] for k in set(t.attr.keys()).union(s.keys())
@@ -123,8 +131,8 @@ class TestConnection(unittest.TestCase):
 
     def test_serialize_deserialize(self):
         t = core.Tensor(np.zeros(3), {'a': 1, 'b': 2})
-        s = core.Connection.deserialize(
-            core.Connection.serialize(t)
+        s = core.Database.deserialize(
+            core.Database.serialize(t)
         )
         self.assertTrue(np.all(t.data == s.data))
         self.assertTrue(all(
@@ -135,10 +143,10 @@ class TestConnection(unittest.TestCase):
 
     def test_save(self):
         conn = sqlite3.Connection(':memory:')
-        tconn = core.Connection(conn)
+        tconn = core.Database(conn)
         t = core.Tensor(np.random.uniform(size=(2, 3)))
         tconn.save(t)
-        s = core.Connection.deserialize(list(conn.cursor().execute(
+        s = core.Database.deserialize(list(conn.cursor().execute(
             'SELECT data, attr, id FROM tensor'
         ))[0])
         self.assertTrue(np.all(t.data == s.data))
@@ -149,7 +157,7 @@ class TestConnection(unittest.TestCase):
         self.assertEqual(t.id, s.id)
         s.data[:, 0] = 0.0
         tconn.save(s)
-        u = core.Connection.deserialize(list(conn.cursor().execute(
+        u = core.Database.deserialize(list(conn.cursor().execute(
             'SELECT data, attr, id FROM tensor'
         ))[0])
         self.assertFalse(np.all(t.data == s.data))
@@ -167,7 +175,7 @@ class TestConnection(unittest.TestCase):
 
     def test__getitem__(self):
         conn = sqlite3.Connection(':memory:')
-        tconn = core.Connection(conn)
+        tconn = core.Database(conn)
         t = core.Tensor(np.random.uniform(size=(2, 3)))
         tconn.save(t)
         s = tconn[t.id]
@@ -191,7 +199,7 @@ class TestConnection(unittest.TestCase):
             tconn[t.id]
 
     def test__setitem__(self):
-        tconn = core.Connection(sqlite3.Connection(':memory:'))
+        tconn = core.Database(sqlite3.Connection(':memory:'))
         t = core.Tensor(np.random.uniform(size=(2, 3)))
         tconn[t.id] = t
         s = tconn[t.id]
@@ -213,7 +221,7 @@ class TestConnection(unittest.TestCase):
         self.assertEqual(new_id, s.id)
 
     def test__delitem__(self):
-        tconn = core.Connection(sqlite3.Connection(':memory:'))
+        tconn = core.Database(sqlite3.Connection(':memory:'))
         t = core.Tensor(np.random.uniform(size=(2, 3)))
         tconn[t.id] = t
         s = tconn[t.id]
@@ -227,7 +235,7 @@ class TestConnection(unittest.TestCase):
             tconn[t.id]
 
     def test__iter__(self):
-        tconn = core.Connection(sqlite3.Connection(':memory:'))
+        tconn = core.Database(sqlite3.Connection(':memory:'))
         arrays = [np.random.uniform(size=(3, 5)) for i in range(5)]
         for d in arrays:
             tconn.save(core.Tensor(d))
@@ -237,7 +245,7 @@ class TestConnection(unittest.TestCase):
             ]))
 
     def test__len__(self):
-        tconn = core.Connection(sqlite3.Connection(':memory:'))
+        tconn = core.Database(sqlite3.Connection(':memory:'))
         self.assertEqual(len(tconn), 0)
         arrays = [np.random.uniform(size=(3, 5)) for i in range(5)]
         for d in arrays:
