@@ -13,9 +13,9 @@ setup(
     author=__author__,
     author_email=__email__,
     license='MIT',
-    url='https://osoken.jp',
+    url='https://github.com/osoken/sqlite-tensor',
     description=__description__,
     long_description=__long_description__,
     packages=[__package_name__],
-    install_requires=['future', 'numpy', 'shortuuid']
+    install_requires=['numpy', 'shortuuid']
 )
