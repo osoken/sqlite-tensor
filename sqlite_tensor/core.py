@@ -169,12 +169,12 @@ class Database(MutableMapping):
     def __getitem__(self, key):
         if not isinstance(key, (str, bytes)):
             return self.__getitem__(str(key))
-        d = list(self.connection.cursor().execute(
+        d = self.connection.cursor().execute(
             'SELECT data, attr, id FROM tensor WHERE id=?', (key, )
-        ))
-        if len(d) == 0:
+        ).fetchone()
+        if d is None:
             raise KeyError(key)
-        return self.deserialize(d[0])
+        return self.deserialize(d)
 
     def __setitem__(self, key, value):
         if isinstance(value, Tensor):
@@ -190,9 +190,9 @@ class Database(MutableMapping):
             yield x[0]
 
     def __len__(self):
-        return list(self.connection.cursor().execute(
+        return self.connection.cursor().execute(
             'SELECT COUNT(*) FROM tensor'
-        ))[0][0]
+        ).fetchone()[0]
 
     @classmethod
     def serialize(cls, tensor):
