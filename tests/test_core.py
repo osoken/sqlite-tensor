@@ -241,7 +241,7 @@ class TestDatabase(unittest.TestCase):
             tconn.save(core.Tensor(d))
         for d in tconn:
             self.assertTrue(any([
-                np.all(d.data == dd) for dd in arrays
+                np.all(tconn[d].data == dd) for dd in arrays
             ]))
 
     def test__len__(self):
@@ -252,5 +252,5 @@ class TestDatabase(unittest.TestCase):
             tconn.save(core.Tensor(d))
         self.assertEqual(len(tconn), 5)
         for d in tconn:
-            del tconn[d.id]
+            del tconn[d]
         self.assertEqual(len(tconn), 0)

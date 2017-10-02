@@ -3,7 +3,10 @@
 import io
 import sqlite3
 import pickle
-from collections import Iterable
+try:
+    from collections.abc import MutableMapping
+except:
+    from collections import MutableMapping
 
 import numpy as np
 
@@ -75,7 +78,7 @@ class Tensor(object):
         return self._data.__setitem__(key, value)
 
 
-class Database(Iterable):
+class Database(MutableMapping):
 
     @property
     def schema_version(self):
@@ -182,8 +185,8 @@ class Database(Iterable):
 
     def __iter__(self):
         for x in self.connection.cursor().execute(
-                'SELECT data, attr, id FROM tensor'):
-            yield self.deserialize(x)
+                'SELECT id FROM tensor'):
+            yield x[0]
 
     def __len__(self):
         return list(self.connection.cursor().execute(
