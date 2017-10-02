@@ -146,9 +146,9 @@ class TestDatabase(unittest.TestCase):
         tconn = core.Database(conn)
         t = core.Tensor(np.random.uniform(size=(2, 3)))
         tconn.save(t)
-        s = core.Database.deserialize(list(conn.cursor().execute(
+        s = core.Database.deserialize(conn.cursor().execute(
             'SELECT data, attr, id FROM tensor'
-        ))[0])
+        ).fetchone())
         self.assertTrue(np.all(t.data == s.data))
         self.assertTrue(all(
             t.attr[k] == s.attr[k] for k in
@@ -157,9 +157,9 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(t.id, s.id)
         s.data[:, 0] = 0.0
         tconn.save(s)
-        u = core.Database.deserialize(list(conn.cursor().execute(
+        u = core.Database.deserialize(conn.cursor().execute(
             'SELECT data, attr, id FROM tensor'
-        ))[0])
+        ).fetchone())
         self.assertFalse(np.all(t.data == s.data))
         self.assertTrue(all(
             t.attr[k] == s.attr[k] for k in
@@ -172,6 +172,18 @@ class TestDatabase(unittest.TestCase):
             set(u.attr.keys()).union(s.attr.keys())
         ))
         self.assertEqual(u.id, s.id)
+
+        t = core.Tensor({
+            'x': np.random.uniform(size=(2, 3)),
+            'y': np.random.uniform(size=(3, )),
+            'z': np.random.uniform(size=(2, ))
+        })
+        tconn.save(t)
+        s = core.Database.deserialize(conn.cursor().execute(
+            'SELECT data, attr, id FROM tensor WHERE id=?', (t.id, )
+        ).fetchone())
+        for k in ('x', 'y', 'z'):
+            self.assertTrue(np.all(t.data[k] == s.data[k]))
 
     def test__getitem__(self):
         conn = sqlite3.Connection(':memory:')

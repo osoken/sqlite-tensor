@@ -3,6 +3,7 @@
 import io
 import sqlite3
 import pickle
+from collections import Mapping
 try:
     from collections.abc import MutableMapping
 except:
@@ -16,7 +17,7 @@ from . import util
 class Tensor(object):
     """``numpy.array`` with attr and id.
 
-    :param data: ``numpy.array``
+    :param data: ``numpy.array`` or ``Mapping``
     :param attr: ``dict`` object or ``None``
     :param id: ``str``
     """
@@ -210,7 +211,10 @@ class Database(MutableMapping):
     @classmethod
     def serialize_array(cls, data):
         s = io.BytesIO()
-        np.save(s, data)
+        if isinstance(data, Mapping):
+            np.savez(s, **data)
+        else:
+            np.save(s, data)
         s.seek(0)
         return sqlite3.Binary(s.read())
 
