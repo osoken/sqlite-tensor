@@ -105,6 +105,32 @@ class Database(MutableMapping):
             'data BLOB, ' +
             'attr BLOB)'
         )
+        cur.execute(
+            'CREATE TABLE collection (' +
+            'id TEXT(22) PRIMARY KEY, ' +
+            'name TEXT UNIQUE NOT NULL) '
+        )
+        cur.execute(
+            'CREATE TABLE collection_member (' +
+            'tensor_id TEXT(22), ' +
+            'collection_id TEXT(22), ' +
+            'ix INTEGER, ' +
+            'FOREIGN KEY (tensor_id) REFERENCES tensor(id), ' +
+            'FOREIGN KEY (collection_id) REFERENCES collection(id), ' +
+            'PRIMARY KEY (collection_id, tensor_id))'
+        )
+        cur.execute(
+            'CREATE INDEX collection_ix_name ON ' +
+            'collection (name)'
+        )
+        cur.execute(
+            'CREATE INDEX collection_member_ix_collection_id ON ' +
+            'collection_member (collection_id)'
+        )
+        cur.execute(
+            'CREATE INDEX collection_member_ix_collection_id_ix ON ' +
+            'collection_member (collection_id, ix)'
+        )
         cur.executemany(
             'INSERT INTO metadata (key, value) VALUES (?, ?)',
             (('schema_version', self.schema_version),
